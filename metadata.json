@@ -1,0 +1,6 @@
+{
+  "name": "IT Ops Dash: GLPI & Zabbix",
+  "description": "Dashboard unificado para monitoramento de ativos (GLPI) e infraestrutura (Zabbix) com notificações via Telegram.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #ffffff;
+    --text-app: #0f172a;
+  }
+
+  body {
+    @apply transition-colors duration-300;
+    background-color: var(--bg-app);
+    color: var(--text-app);
+  }
+}
+
+@theme {
+  --color-app-bg: var(--bg-app);
+  --color-card-bg: var(--bg-card);
+  --color-border-main: var(--border-main);
+  --color-text-main: var(--text-main);
+  --color-text-heading: var(--text-heading);
+  --color-text-muted: var(--text-muted);
+}
