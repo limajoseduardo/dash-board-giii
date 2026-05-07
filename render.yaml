@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: bashboard
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: VITE_GLPI_URL
+        sync: false
+      - key: GLPI_APP_TOKEN
+        sync: false
+      - key: GLPI_USER
+        sync: false
+      - key: GLPI_PASSWORD
+        sync: false
+      - key: VITE_ZABBIX_URL
+        sync: false
+      - key: VITE_ZABBIX_TOKEN
+        sync: false
+      - key: ZABBIX_USER
+        sync: false
+      - key: ZABBIX_PASSWORD
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
