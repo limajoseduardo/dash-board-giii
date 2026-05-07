@@ -249,28 +249,34 @@ async function getGlpiConsumables() {
 
     if (!sessionToken) return [];
 
-    // Search Consumables
-    const searchRes = await axios.get(`${url}/search/Consumable`, {
-      params: {
-        'forcedisplay[0]': 1,
-        'forcedisplay[1]': 2,
-        'forcedisplay[2]': 5,
-        'forcedisplay[3]': 6,
-        'range': '0-100'
-      },
-      headers: { 'App-Token': appToken, 'Session-Token': sessionToken },
-      timeout: 10000
-    }).catch(err => {
-      const isConnError = err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED';
-      if (isConnError) return { data: { data: [] } };
-      throw err;
-    });
+    const hdrs = { 'App-Token': appToken, 'Session-Token': sessionToken };
 
-    const items = (searchRes.data?.data || []).map((t: any) => ({
-      id: t[2],
-      name: t[1],
-      stock: parseInt(t[5] || "0"),
-      alarm: parseInt(t[6] || "5")
+    // Get consumable types (ConsumableItem)
+    const typesRes = await axios.get(`${url}/ConsumableItem`, {
+      params: { range: '0-50', is_deleted: 0 },
+      headers: hdrs,
+      timeout: 10000
+    }).catch(() => ({ data: [] }));
+
+    const types: any[] = Array.isArray(typesRes.data) ? typesRes.data : [];
+
+    // For each type, count available stock (Consumable records without date_use)
+    const items = await Promise.all(types.map(async (t: any) => {
+      const stockRes = await axios.get(`${url}/Consumable`, {
+        params: { 'searchText[consumableitems_id]': t.id, range: '0-500' },
+        headers: hdrs,
+        timeout: 8000
+      }).catch(() => ({ data: [] }));
+
+      const all: any[] = Array.isArray(stockRes.data) ? stockRes.data : [];
+      const available = all.filter((c: any) => !c.date_use || c.date_use === 'NULL' || c.date_use === null).length;
+
+      return {
+        id: t.id,
+        name: t.name,
+        stock: available,
+        alarm: parseInt(t.alarm_threshold || "1")
+      };
     }));
 
     return items;
