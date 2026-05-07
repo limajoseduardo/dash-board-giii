@@ -1,261 +1,176 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  ShieldAlert, 
-  Clock, 
-  ExternalLink, 
-  Ticket, 
-  ChevronUp, 
-  ChevronDown,
-  ArrowUpDown,
-  Monitor,
-  AlertCircle,
-  AlertTriangle,
-  Info
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AlertCircle, AlertTriangle, Info, Monitor, Clock, ExternalLink, Ticket, ChevronUp, ChevronDown } from 'lucide-react';
 import { ZabbixProblem, cn } from '../App';
 
 interface ZabbixProblemTableProps {
   problems: ZabbixProblem[];
   theme: 'dark' | 'light';
+  compact?: boolean;
 }
 
 type SortField = 'severity' | 'clock' | 'name' | 'host';
 type SortOrder = 'asc' | 'desc';
 
-export const ZabbixProblemTable: React.FC<ZabbixProblemTableProps> = ({ problems, theme }) => {
+const SEV_LABEL: Record<string, string> = {
+  "0": "N/C", "1": "Info", "2": "Aviso", "3": "Média", "4": "Alta", "5": "Desastre"
+};
+
+function getSevTextColor(s: string, compact?: boolean) {
+  const map: Record<string, string> = {
+    "0": "text-gray-400",
+    "1": "text-blue-400",
+    "2": "text-yellow-400",
+    "3": "text-orange-400",
+    "4": "text-red-400",
+    "5": compact ? "text-red-300 animate-pulse" : "text-red-300 font-black animate-pulse"
+  };
+  return map[s] || "text-gray-400";
+}
+
+function getSevRowBg(s: string) {
+  const map: Record<string, string> = {
+    "0": "", "1": "", "2": "bg-yellow-950/10", "3": "bg-orange-950/20",
+    "4": "bg-red-950/30", "5": "bg-red-950/50"
+  };
+  return map[s] || "";
+}
+
+function getSevLeftBorder(s: string) {
+  const map: Record<string, string> = {
+    "0": "border-l-gray-700", "1": "border-l-blue-700",
+    "2": "border-l-yellow-600", "3": "border-l-orange-600",
+    "4": "border-l-red-600", "5": "border-l-red-400"
+  };
+  return map[s] || "border-l-gray-700";
+}
+
+function formatDuration(s: number) {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m`;
+  return `${Math.floor(s / 86400)}d${Math.floor((s % 86400) / 3600)}h`;
+}
+
+export const ZabbixProblemTable: React.FC<ZabbixProblemTableProps> = ({ problems, theme, compact }) => {
   const [sortField, setSortField] = useState<SortField>('severity');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
-  const getSeverityLabel = (s: string) => {
-    const severities: Record<string, string> = {
-      "0": "Não classificado", "1": "Informação", "2": "Aviso", "3": "Média", "4": "Alta", "5": "Desastre"
-    };
-    return severities[s] || "Desconhecido";
+  const sorted = useMemo(() => [...problems].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === 'severity') cmp = Number(a.severity) - Number(b.severity);
+    else if (sortField === 'clock') cmp = a.clock - b.clock;
+    else if (sortField === 'name') cmp = a.name.localeCompare(b.name);
+    else if (sortField === 'host') cmp = (a.hosts?.[0] || '').localeCompare(b.hosts?.[0] || '');
+    return sortOrder === 'asc' ? cmp : -cmp;
+  }), [problems, sortField, sortOrder]);
+
+  const toggleSort = (f: SortField) => {
+    if (sortField === f) setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
+    else { setSortField(f); setSortOrder('desc'); }
   };
 
-  const getSeverityBgColor = (s: string) => {
-    const severities: Record<string, string> = {
-      "0": "bg-gray-100", // Não classificado
-      "1": "bg-blue-50",   // Information
-      "2": "bg-yellow-50", // Warning
-      "3": "bg-orange-50", // Average
-      "4": "bg-red-50",     // High
-      "5": "bg-red-100 shadow-[inset_4px_0_0_#ef4444]" // Disaster
-    };
-    return severities[s] || "bg-white";
-  };
+  const SortIcon = ({ f }: { f: SortField }) =>
+    sortField !== f
+      ? <span className="opacity-20 ml-0.5">↕</span>
+      : sortOrder === 'asc' ? <ChevronUp className="size-3 ml-0.5 text-blue-400 inline" /> : <ChevronDown className="size-3 ml-0.5 text-blue-400 inline" />;
 
-  const getSeverityTextColor = (s: string) => {
-    const severities: Record<string, string> = {
-      "0": "text-gray-500",
-      "1": "text-blue-700",
-      "2": "text-yellow-700",
-      "3": "text-orange-700",
-      "4": "text-red-700",
-      "5": "text-red-800 font-black"
-    };
-    return severities[s] || "text-gray-900";
-  };
+  const zabbixBase = import.meta.env.VITE_ZABBIX_URL?.replace('/api_jsonrpc.php', '') || '';
+  const glpiBase = (import.meta.env.VITE_GLPI_URL || '').split('/apirest.php')[0].replace(/\/$/, '');
+  const glpiUrl  = import.meta.env.VITE_GLPI_URL || '';
 
-  const formatDuration = (seconds: number) => {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-    return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-  };
-
-  const sortedProblems = useMemo(() => {
-    return [...problems].sort((a, b) => {
-      let comparison = 0;
-      switch (sortField) {
-        case 'severity':
-          comparison = Number(a.severity) - Number(b.severity);
-          break;
-        case 'clock':
-          comparison = a.clock - b.clock;
-          break;
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'host':
-          comparison = ((a.hosts?.[0] || '') as string).localeCompare((b.hosts?.[0] || '') as string);
-          break;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-  }, [problems, sortField, sortOrder]);
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortOrder('desc');
-    }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="size-3 opacity-30 ml-1" />;
-    return sortOrder === 'asc' ? <ChevronUp className="size-3 ml-1 text-blue-500" /> : <ChevronDown className="size-3 ml-1 text-blue-500" />;
-  };
+  const thRow   = compact ? "px-3 py-1.5" : "px-4 py-3";
+  const tdRow   = compact ? "px-3 py-1.5" : "px-4 py-3";
+  const textSev = compact ? "text-[10px]" : "text-xs";
+  const textSm  = compact ? "text-[10px]" : "text-xs";
+  const textXs  = compact ? "text-[9px]" : "text-[10px]";
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-red-500/10 rounded-lg">
-            <ShieldAlert className="size-5 text-red-500" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Problemas Ativos do Zabbix
-            </h2>
-            <p className="text-[10px] text-zinc-500 font-mono flex items-center gap-1.5 uppercase tracking-widest">
-              <span className="size-1.5 rounded-full bg-red-500 animate-pulse"></span>
-              {problems.length} Incidências em Tempo Real
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      <div className="border rounded-2xl overflow-hidden shadow-xl transition-all bg-white border-gray-200">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-gray-500">
-                <th 
-                  className="px-6 py-4 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-blue-500 transition-colors"
-                  onClick={() => toggleSort('severity')}
-                >
-                  <div className="flex items-center">SEVERIDADE <SortIcon field="severity" /></div>
-                </th>
-                <th 
-                  className="px-6 py-4 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-blue-500 transition-colors"
-                  onClick={() => toggleSort('host')}
-                >
-                  <div className="flex items-center">HOST <SortIcon field="host" /></div>
-                </th>
-                <th 
-                  className="px-6 py-4 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-blue-500 transition-colors"
-                  onClick={() => toggleSort('name')}
-                >
-                  <div className="flex items-center">PROBLEMA <SortIcon field="name" /></div>
-                </th>
-                <th 
-                  className="px-6 py-4 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-blue-500 transition-colors"
-                  onClick={() => toggleSort('clock')}
-                >
-                  <div className="flex items-center">HORA INÍCIO <SortIcon field="clock" /></div>
-                </th>
-                <th className="px-6 py-4 font-bold uppercase tracking-wider text-[10px]">DURAÇÃO</th>
-                <th className="px-6 py-4 font-bold uppercase tracking-wider text-[10px]">AÇÕES</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <AnimatePresence mode="popLayout">
-                {sortedProblems.length > 0 ? (
-                  sortedProblems.map((p) => (
-                    <motion.tr 
-                      key={p.eventid}
-                      layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className={cn(
-                        "group transition-all hover:brightness-[1.05]",
-                        getSeverityBgColor(p.severity)
-                      )}
-                    >
-                      <td className="px-6 py-4">
-                        <div className={cn(
-                          "flex items-center gap-2 font-black text-[10px] uppercase tracking-tighter",
-                          getSeverityTextColor(p.severity)
-                        )}>
-                          {Number(p.severity) >= 4 && <AlertCircle className="size-3.5 fill-current opacity-70" />}
-                          {(Number(p.severity) === 3 || Number(p.severity) === 2) && <AlertTriangle className="size-3.5 fill-current opacity-70" />}
-                          {Number(p.severity) <= 1 && <Info className="size-3.5 fill-current opacity-70" />}
-                          {getSeverityLabel(p.severity)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Monitor className="size-3.5 text-zinc-500" />
-                          <span className="text-xs font-bold uppercase tracking-tight truncate max-w-[120px] text-gray-900">
-                            {p.hosts?.[0] || 'Unknown'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-medium line-clamp-2 leading-relaxed group-hover:text-blue-500 transition-colors text-gray-800">
-                            {p.name}
-                          </span>
-                          <span className="text-[9px] font-mono text-zinc-500 font-bold">{p.ip}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-zinc-500">
-                          <Clock className="size-3.5" />
-                          <span className="text-[11px] font-mono font-bold">
-                            {new Date(p.clock * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full inline-block bg-white/50 text-gray-500 border border-gray-200">
-                          {formatDuration(p.duration)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center gap-2 justify-end">
-                          <a 
-                            href={`${import.meta.env.VITE_ZABBIX_URL?.replace('/api_jsonrpc.php', '')}/zabbix.php?action=problem.view&filter_eventid=${p.eventid}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm group/btn"
-                            title="Ver Detalhes Zabbix"
-                          >
-                            <ExternalLink className="size-4" />
-                          </a>
-                          <a 
-                            href={`${import.meta.env.VITE_GLPI_URL?.replace('/apirest.php', '')}/front/ticket.form.php?name=${encodeURIComponent(`[Zabbix] ${p.hosts?.[0] || 'Host'} - ${p.name}`)}&content=${encodeURIComponent(`PROPRIEDADES DO ALERTA\n----------------------\nSistema: Zabbix Monitoring\nHost: ${(p.hosts || []).join(', ')}\nIP: ${p.ip || 'N/A'}\nProblema: ${p.name}\nSeveridade: ${getSeverityLabel(p.severity)}\nInício: ${new Date(p.clock * 1000).toLocaleString()}\nEvento ID: ${p.eventid}\n\nDESCRIÇÃO ADICIONAL\n----------------------\nEvento detectado via Dashboard Integrado.`)}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white border border-emerald-500 rounded-lg hover:bg-emerald-700 transition-all shadow-md group/btn-glpi"
-                            title="Criar Ticket GLPI"
-                          >
-                            <Ticket className="size-3.5" />
-                            <span className="text-[10px] font-bold uppercase tracking-tight">Criar Ticket</span>
-                          </a>
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))
-                ) : (
-                  <motion.tr
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <td colSpan={6} className="px-6 py-20 text-center">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="size-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                          <Monitor className="size-8 text-emerald-500" />
-                        </div>
-                        <div className="space-y-1">
-                          <h3 className="text-lg font-bold uppercase tracking-tight text-gray-900">Rede Estável</h3>
-                          <p className="text-zinc-500 text-sm">Não existem problemas pendentes de no Zabbix.</p>
-                        </div>
-                      </div>
-                    </td>
-                  </motion.tr>
-                )}
-              </AnimatePresence>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <table className="w-full text-sm border-collapse">
+      <thead className="sticky top-0 z-10 bg-gray-900">
+        <tr className="border-b border-gray-800">
+          <th className={cn(thRow, "text-left cursor-pointer hover:text-blue-400 transition-colors whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-gray-500")}
+            onClick={() => toggleSort('severity')}>
+            SEV <SortIcon f="severity" />
+          </th>
+          <th className={cn(thRow, "text-left cursor-pointer hover:text-blue-400 transition-colors whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-gray-500")}
+            onClick={() => toggleSort('host')}>
+            HOST <SortIcon f="host" />
+          </th>
+          <th className={cn(thRow, "text-left cursor-pointer hover:text-blue-400 transition-colors text-[9px] font-black uppercase tracking-widest text-gray-500")}
+            onClick={() => toggleSort('name')}>
+            PROBLEMA <SortIcon f="name" />
+          </th>
+          <th className={cn(thRow, "text-left cursor-pointer hover:text-blue-400 transition-colors whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-gray-500")}
+            onClick={() => toggleSort('clock')}>
+            INÍCIO <SortIcon f="clock" />
+          </th>
+          <th className={cn(thRow, "text-left text-[9px] font-black uppercase tracking-widest text-gray-500 whitespace-nowrap")}>DUR.</th>
+          <th className={cn(thRow, "text-right text-[9px] font-black uppercase tracking-widest text-gray-500")}>AÇÃO</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-800/60">
+        {sorted.length === 0 ? (
+          <tr>
+            <td colSpan={6} className="py-16 text-center">
+              <div className="flex flex-col items-center gap-3 text-gray-600">
+                <Monitor className="size-10" />
+                <p className="text-sm font-bold uppercase">Rede Estável</p>
+                <p className="text-xs">Sem problemas ativos no Zabbix</p>
+              </div>
+            </td>
+          </tr>
+        ) : sorted.map(p => (
+          <tr key={p.eventid}
+            className={cn("group transition-colors hover:brightness-110 border-l-2", getSevRowBg(p.severity), getSevLeftBorder(p.severity))}>
+            <td className={tdRow}>
+              <span className={cn("font-black whitespace-nowrap", textSev, getSevTextColor(p.severity, compact))}>
+                {Number(p.severity) >= 4 && <AlertCircle className="size-3 inline mr-0.5 fill-current opacity-70" />}
+                {Number(p.severity) === 2 || Number(p.severity) === 3
+                  ? <AlertTriangle className="size-3 inline mr-0.5 fill-current opacity-70" /> : null}
+                {Number(p.severity) <= 1 && <Info className="size-3 inline mr-0.5 fill-current opacity-70" />}
+                {SEV_LABEL[p.severity]}
+              </span>
+            </td>
+            <td className={tdRow}>
+              <span className={cn("font-bold uppercase truncate max-w-[100px] block text-gray-300", textSm)}>
+                {p.hosts?.[0] || '?'}
+              </span>
+              {p.ip && p.ip !== 'N/A' && (
+                <span className={cn("font-mono text-gray-600", textXs)}>{p.ip}</span>
+              )}
+            </td>
+            <td className={cn(tdRow, "max-w-0")}>
+              <p className={cn("truncate text-gray-200 font-medium", textSm)} title={p.name}>{p.name}</p>
+            </td>
+            <td className={tdRow}>
+              <span className={cn("font-mono text-gray-500 whitespace-nowrap", textXs)}>
+                {new Date(p.clock * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </td>
+            <td className={tdRow}>
+              <span className={cn("font-mono font-black text-gray-500 whitespace-nowrap", textXs)}>
+                {formatDuration(p.duration)}
+              </span>
+            </td>
+            <td className={cn(tdRow, "text-right")}>
+              <div className="flex items-center gap-1 justify-end">
+                <a href={`${zabbixBase}/zabbix.php?action=problem.view&filter_eventid=${p.eventid}`}
+                  target="_blank" rel="noreferrer"
+                  className="p-1 rounded bg-blue-900/40 text-blue-400 border border-blue-800/50 hover:bg-blue-600 hover:text-white transition-all"
+                  title="Ver no Zabbix">
+                  <ExternalLink className="size-3" />
+                </a>
+                <a href={`${glpiBase}/front/ticket.form.php?name=${encodeURIComponent(`[Zabbix] ${p.hosts?.[0] || 'Host'} - ${p.name}`)}&content=${encodeURIComponent(`Host: ${(p.hosts || []).join(', ')}\nIP: ${p.ip || 'N/A'}\nProblema: ${p.name}\nSeveridade: ${SEV_LABEL[p.severity]}\nInício: ${new Date(p.clock * 1000).toLocaleString()}`)}`}
+                  target="_blank" rel="noreferrer"
+                  className="p-1 rounded bg-emerald-900/40 text-emerald-400 border border-emerald-800/50 hover:bg-emerald-600 hover:text-white transition-all"
+                  title="Criar Ticket GLPI">
+                  <Ticket className="size-3" />
+                </a>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 };

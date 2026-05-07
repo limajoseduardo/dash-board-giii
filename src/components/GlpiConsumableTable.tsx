@@ -1,9 +1,5 @@
 import React from 'react';
-import { 
-  Package, 
-  AlertCircle,
-  CheckCircle2
-} from 'lucide-react';
+import { Package, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../App';
 
 export interface GlpiConsumable {
@@ -19,61 +15,49 @@ interface GlpiConsumableTableProps {
 }
 
 export function GlpiConsumableTable({ consumables, theme }: GlpiConsumableTableProps) {
+  const low = consumables.filter(c => c.stock <= c.alarm);
+
   return (
-    <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold flex items-center gap-2 px-2 text-gray-900">
-        <Package className="size-5 text-emerald-500" />
-        Consumíveis GLPI ({consumables.length})
-      </h2>
-      <div className="border rounded-xl overflow-hidden shadow-sm bg-white border-gray-200">
-        <table className="w-full text-xs text-left border-collapse">
-          <thead>
-            <tr className="border-b bg-gray-50 border-gray-100 text-gray-400">
-              <th className="px-4 py-3 font-bold uppercase tracking-wider">Item</th>
-              <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">Stock</th>
-              <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {consumables.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-zinc-500 italic">
-                  Nenhum consumível listado ou erro ao carregar.
-                </td>
-              </tr>
-            ) : (
-              consumables.map(item => (
-                <tr key={item.id} className="group transition-colors hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-700">{item.name}</p>
-                    <p className="text-[10px] text-zinc-500">ID: {item.id}</p>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={cn(
-                      "font-mono font-bold text-sm",
-                      item.stock <= item.alarm ? "text-red-500" : "text-emerald-500"
-                    )}>
-                      {item.stock}
-                    </span>
-                    <span className="text-[10px] text-zinc-500 ml-1">/ {item.alarm}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {item.stock <= item.alarm ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-500 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
-                        <AlertCircle className="size-3" /> REPOR
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        <CheckCircle2 className="size-3" /> OK
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+    <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+      <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
+        <Package className="size-3 text-emerald-400" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Consumíveis</span>
+        {low.length > 0 && (
+          <span className="ml-auto px-1.5 py-0.5 bg-red-900/50 text-red-400 border border-red-800 rounded text-[9px] font-black">
+            {low.length} REPOR
+          </span>
+        )}
       </div>
+      {consumables.length === 0 ? (
+        <p className="px-3 py-3 text-[10px] text-gray-600 italic">Sem dados</p>
+      ) : (
+        <div className="divide-y divide-gray-800/60">
+          {consumables.slice(0, 8).map(item => {
+            const critical = item.stock <= item.alarm;
+            const pct = item.alarm > 0 ? Math.min(100, Math.round((item.stock / (item.alarm * 3)) * 100)) : 100;
+            return (
+              <div key={item.id} className="px-3 py-1.5 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-gray-300 truncate font-medium">{item.name}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full transition-all",
+                        critical ? "bg-red-500" : pct > 60 ? "bg-emerald-500" : "bg-yellow-500"
+                      )} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={cn("text-[9px] font-mono font-black whitespace-nowrap",
+                      critical ? "text-red-400" : "text-gray-500"
+                    )}>{item.stock}/{item.alarm}</span>
+                  </div>
+                </div>
+                {critical
+                  ? <AlertCircle className="size-3 text-red-400 flex-none" />
+                  : <CheckCircle2 className="size-3 text-emerald-600 flex-none" />}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
