@@ -165,24 +165,13 @@ async function getGlpiTickets() {
       }
     }
 
-    // 2. Search for current tickets (status != 6)
-    const searchRes = await axios.get(`${url}/search/Ticket`, {
-      params: { 
-        'criteria[0][field]': 12,
-        'criteria[0][condition]': '!=',
-        'criteria[0][value]': 6,
-        'forcedisplay[0]': 1,
-        'forcedisplay[1]': 2,
-        'forcedisplay[2]': 12,
-        'forcedisplay[3]': 19,
-        'forcedisplay[4]': 4,
-        'forcedisplay[5]': 5,
-        'forcedisplay[6]': 9,
-        'forcedisplay[7]': 15,
-        'forcedisplay[8]': 7,
-        'sort': 19, 
+    // 2. Get tickets via /Ticket endpoint and filter closed (status=6) server-side
+    const searchRes = await axios.get(`${url}/Ticket`, {
+      params: {
+        'range': '0-100',
+        'is_deleted': 0,
         'order': 'DESC',
-        'range': '0-50'
+        'sort': 'date_mod'
       },
       headers: {
         'App-Token': appToken,
@@ -192,26 +181,30 @@ async function getGlpiTickets() {
       timeout: 15000
     }).catch(err => {
       const isConnError = err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'ECONNREFUSED';
-      if (isConnError) return { data: { data: [] } };
+      if (isConnError) return { data: [] };
       throw err;
     });
 
+    const rawTickets = Array.isArray(searchRes.data) ? searchRes.data : [];
+
     apiDiagnostics.glpi.status = "OK";
-    apiDiagnostics.glpi.totalRaw = searchRes.data.totalcount || 0;
+    apiDiagnostics.glpi.totalRaw = rawTickets.length;
     apiDiagnostics.glpi.lastError = null;
 
-    // Transform search data to friendly format
-    const tickets = (searchRes.data.data || []).map((t: any) => ({
-      id: t[2],
-      name: t[1],
-      status: t[12],
-      date_mod: t[19],
-      date_creation: t[15],
-      priority: parseInt(t[9] || "3"), 
-      requester: t[4],
-      technician: t[5],
-      category: t[7]
-    }));
+    // Filter out closed tickets (status 6) and map to standard format
+    const tickets = rawTickets
+      .filter((t: any) => t.status !== 6)
+      .map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        date_mod: t.date_mod,
+        date_creation: t.date,
+        priority: parseInt(t.priority || "3"),
+        requester: t.users_id_recipient,
+        technician: t.users_id_lastupdater,
+        category: t.itilcategories_id
+      }));
 
     return tickets;
   } catch (error: any) {
@@ -369,7 +362,7 @@ async function getZabbixProblems() {
       params: {
         output: "extend",
         selectHosts: ["host", "name"],
-        sortfield: ["severity", "eventid"],
+        sortfield: ["eventid"],
         sortorder: "DESC",
         filter: {
           value: 1
@@ -396,7 +389,7 @@ async function getZabbixProblems() {
     apiDiagnostics.zabbix.version = versionRes.data.result;
     apiDiagnostics.zabbix.lastError = null;
     
-    // Transform to standard format
+    // Transform to standard format, sort by severity desc
     const activeProblems = (response.data.result || []).map((p: any) => {
       const host = p.hosts?.[0] || { name: "Unknown", host: "N/A" };
       return {
@@ -405,11 +398,11 @@ async function getZabbixProblems() {
         severity: p.severity,
         clock: parseInt(p.clock),
         hosts: [host.name],
-        ip: host.host, 
+        ip: host.host,
         acknowledged: p.acknowledged || "0",
         duration: Math.floor(Date.now() / 1000) - parseInt(p.clock)
       };
-    });
+    }).sort((a: any, b: any) => parseInt(b.severity) - parseInt(a.severity));
 
     apiDiagnostics.zabbix.activeCount = activeProblems.length;
 
